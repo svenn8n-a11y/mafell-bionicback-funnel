@@ -209,9 +209,9 @@
   <!-- DANKE -->
   <div class="done" id="done">
     <svg class="check" viewBox="0 0 64 64"><circle cx="32" cy="32" r="32" fill="#CD081E"/><polyline points="20,33 28,42 45,23" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    <h2>Geschafft — wir melden uns!</h2>
-    <p>Wir rufen Sie in der Regel innerhalb von 1–2 Werktagen zurück, stimmen den Testzeitraum ab und bringen das passende Leihgerät vorbei.</p>
-    <p style="margin-top:14px;">Lieber direkt sprechen? <strong><a href="tel:+498331955970" style="color:#CD081E;text-decoration:none;">08331 9559-0</a></strong></p>
+    <h2>Fast geschafft — bitte die Mail noch abschicken</h2>
+    <p>Ihre Angaben stehen in einer vorbereiteten E-Mail an uns. Ihr Mailprogramm sollte sich gerade geöffnet haben. Sobald die Mail bei uns ist, melden wir uns und stimmen alles Weitere mit Ihnen ab.</p>
+    <p style="margin-top:14px;">Hat sich nichts geöffnet oder geht es Ihnen schneller? <strong><a href="tel:+498331955970" style="color:#CD081E;text-decoration:none;">08331 9559-0</a></strong></p>
   </div>
 
   <div class="legal">
@@ -224,7 +224,10 @@
 (function(){
   // === KONFIGURATION ===
   // n8n-Webhook-URL hier eintragen (Produktiv-URL aus n8n):
-  const WEBHOOK_URL = "https://n8n.srv1115168.hstgr.cloud/webhook/bionicback-test"; // TODO: echte URL/Pfad bestätigen
+  // In n8n existiert zu dieser Adresse kein Workflow (Stand 10.09.2026), sie antwortet mit 404.
+  // Deshalb aus: die Anfrage geht per E-Mail raus. Wird der Workflow gebaut, hier auf true setzen.
+  const WEBHOOK_AKTIV = false;
+  const WEBHOOK_URL = "https://n8n.srv1115168.hstgr.cloud/webhook/bionicback-test";
 
   const form = document.getElementById('funnel');
   const steps = [...form.querySelectorAll('.step')];
@@ -299,13 +302,35 @@
     data.quelle = 'Newsletter BG-Bau / BionicBack-Funnel';
     data.zeitpunkt = new Date().toISOString();
 
-    next.disabled = true; next.textContent = 'Wird gesendet…';
-    fetch(WEBHOOK_URL, {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(data)
-    }).then(()=>showDone())
-      .catch(()=>showDone()); // Bei Fehler trotzdem Danke zeigen; n8n-Retry/Logging serverseitig
+    next.disabled = true; next.textContent = 'Wird geöffnet…';
+    if (WEBHOOK_AKTIV) {
+      fetch(WEBHOOK_URL, {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(data)
+      }).then(()=>showDone()).catch(()=>perMail());
+    } else {
+      perMail();
+    }
+  }
+
+  // Solange kein Webhook existiert, geht die Anfrage per E-Mail raus.
+  // Vorher wurde bei einem Fehler trotzdem "Danke" angezeigt - die Eingaben waren dann weg.
+  function perMail(){
+    const beschriftung = {
+      personen:'Beschäftigte mit Hebearbeit', gewerk:'Gewerk', belastung:'Belastung',
+      zeitraum:'Zeitraum', bgbau:'BG-BAU-Förderung', name:'Name', position:'Position',
+      betrieb:'Betrieb', telefon:'Telefon', ort:'Ort', email:'E-Mail'
+    };
+    const zeilen = Object.keys(data)
+      .filter(k => k !== 'quelle' && k !== 'zeitpunkt' && data[k])
+      .map(k => (beschriftung[k] || k) + ': ' + data[k]);
+    const text = 'Guten Tag,\n\nwir interessieren uns für den BionicBack-Test.\n\n'
+               + zeilen.join('\n') + '\n\nViele Grüße\n';
+    window.location.href = 'mailto:info@poeppel-wkz.de'
+      + '?subject=' + encodeURIComponent('BionicBack: Test anfragen')
+      + '&body=' + encodeURIComponent(text);
+    showDone();
   }
 
   function showDone(){
